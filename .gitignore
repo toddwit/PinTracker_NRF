@@ -1,0 +1,19 @@
+# Build artifacts
+build/
+**/build/
+
+# Zephyr / NCS
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+*.ninja
+
+# VS Code
+.vscode/
+
+# Python / misc
+*.pyc
+__pycache__/
+
+# Logs
+*.log
