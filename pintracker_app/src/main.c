@@ -3,6 +3,11 @@
 #include <zephyr/drivers/spi.h>
 #include <zephyr/drivers/gpio.h>
 
+#define RST_NODE DT_NODELABEL(gpio0)
+static const struct device *rst_gpio = DEVICE_DT_GET(RST_NODE);
+
+#define RST_PIN 28   // adjust if needed
+
 #define SPI_NODE DT_NODELABEL(spi3)
 static const struct device *spi_dev = DEVICE_DT_GET(SPI_NODE);
 
@@ -24,6 +29,65 @@ void cs_deselect(void) {
     gpio_pin_set(cs_gpio, CS_PIN, 1);
 }
 
+int dw_write_reg(uint8_t reg, uint8_t *data, size_t len)
+{
+    uint8_t header[1] = {reg | 0x80}; // write = set MSB
+
+    struct spi_buf tx_bufs[2] = {
+        { .buf = header, .len = 1 },
+        { .buf = data,   .len = len }
+    };
+
+    struct spi_buf_set tx = { .buffers = tx_bufs, .count = 2 };
+
+    cs_select();
+    int ret = spi_write(spi_dev, &spi_cfg, &tx);
+    cs_deselect();
+
+    return ret;
+}
+
+int dw_read_reg(uint8_t reg, uint8_t *buf, size_t len)
+{
+    uint8_t header[1] = {reg};
+
+    struct spi_buf tx_bufs[2] = {
+        { .buf = header, .len = 1 },
+        { .buf = NULL,   .len = len }
+    };
+
+    struct spi_buf rx_bufs[2] = {
+        { .buf = NULL, .len = 1 },
+        { .buf = buf,  .len = len }
+    };
+
+    struct spi_buf_set tx = { .buffers = tx_bufs, .count = 2 };
+    struct spi_buf_set rx = { .buffers = rx_bufs, .count = 2 };
+
+    cs_select();
+    int ret = spi_transceive(spi_dev, &spi_cfg, &tx, &rx);
+    cs_deselect();
+
+    return ret;
+}
+
+void dw_reset(void)
+{
+    if (!device_is_ready(rst_gpio)) {
+        return;
+    }
+
+    gpio_pin_configure(rst_gpio, RST_PIN, GPIO_OUTPUT_ACTIVE);
+
+    // Drive reset low
+    gpio_pin_set(rst_gpio, RST_PIN, 0);
+    k_sleep(K_MSEC(2));
+
+    // Release reset (high)
+    gpio_pin_set(rst_gpio, RST_PIN, 1);
+    k_sleep(K_MSEC(5));
+}
+
 int main(void)
 {
     printk("PinTracker start\r\n");
@@ -42,29 +106,24 @@ int main(void)
 
     printk("SPI + CS ready\r\n");
 
+    dw_reset();
+    k_sleep(K_MSEC(1000));
+    printk("DW reset done\r\n");
+
     while (1)
     {
-       	uint8_t tx_buf[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
-		uint8_t rx_buf[5] = {0};
+        uint8_t id[4];
 
-		struct spi_buf tx = { .buf = tx_buf, .len = sizeof(tx_buf) };
-		struct spi_buf rx = { .buf = rx_buf, .len = sizeof(rx_buf) };
+        dw_read_reg(0x00, id, 4);
 
-		struct spi_buf_set tx_set = { .buffers = &tx, .count = 1 };
-		struct spi_buf_set rx_set = { .buffers = &rx, .count = 1 };
+        uint32_t dev_id =
+            (id[3] << 24) |
+            (id[2] << 16) |
+            (id[1] << 8)  |
+            (id[0]);
 
-		cs_select();
-		int ret = spi_transceive(spi_dev, &spi_cfg, &tx_set, &rx_set);
-		cs_deselect();
+        printk("DEV_ID: 0x%08X\r\n", dev_id);
 
-		if (ret == 0) {
-			uint32_t dev_id =
-				(rx_buf[4] << 24) |
-				(rx_buf[3] << 16) |
-				(rx_buf[2] << 8)  |
-				(rx_buf[1]);
-
-			printk("DEV_ID: 0x%08X\r\n", dev_id);
-		}
+        k_sleep(K_SECONDS(1));
     }
 }
