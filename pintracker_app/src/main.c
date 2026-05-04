@@ -606,30 +606,38 @@ int main(void)
 {
     printk("PinTracker start\r\n");
 
-    // your existing SPI + CS init here
-    // your existing dw_reset() here
+    printk("A\r\n");
+
+	if (!device_is_ready(spi_dev)) {
+		printk("SPI not ready\r\n");
+		return 0;
+	}
+
+	printk("B\r\n");
+
+	if (!device_is_ready(cs_gpio)) {
+		printk("CS GPIO not ready\r\n");
+		return 0;
+	}
+
+	printk("C\r\n");
+
+	gpio_pin_configure(cs_gpio, CS_PIN, GPIO_OUTPUT_HIGH);
+
+	printk("D\r\n");
 
     k_sleep(K_MSEC(20));
 
-    // =========================
-    // 🔥 DW3000 INIT (CRITICAL)
-    // =========================
-    if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
-        printk("INIT FAILED\r\n");
-        while (1);
-    }
+	dwt_txconfig_t txconfig_options = {
+			0x34,
+			0x0F0F0F0F
+		};
 
-    if (dwt_configure(&config)) {
-        printk("CONFIG FAILED\r\n");
-        while (1);
-    }
+	dw_reset();
+	dw_wait_ready();
 
-    dwt_configuretxrf(&txconfig_options);
+	printk("DW3000 ready\r\n");
 
-    dwt_setrxantennadelay(16384);
-    dwt_settxantennadelay(16384);
-
-    printk("DW3000 configured\r\n");
 
     // =========================
     // 🔥 LOOP
@@ -650,7 +658,7 @@ int main(void)
         int timeout = 1000;
 
         do {
-            status = dwt_read32bitreg(SYS_STATUS_ID);
+            status = dwt_read_reg(SYS_STATUS_ID);
             timeout--;
         } while (!(status & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)) && timeout > 0);
 
@@ -658,7 +666,7 @@ int main(void)
         {
             printk("RX OK\r\n");
 
-            uint32_t frame_len = dwt_read32bitreg(RX_FINFO_ID) & 0x7F;
+            uint32_t frame_len = dwt_read_reg(RX_FINFO_ID) & 0x7F;
 
             if (frame_len <= sizeof(rx_buffer))
             {
@@ -666,14 +674,14 @@ int main(void)
             }
 
             // clear RX flag
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+            dwt_write_reg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
         }
         else
         {
             printk("RX TIMEOUT\r\n");
 
             // clear errors
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+            dwt_write_reg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
         }
 
         k_sleep(K_MSEC(500));
