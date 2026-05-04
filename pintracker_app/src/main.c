@@ -601,76 +601,14 @@ int readfromspi(uint16_t headerLength,
 
 
 
-// ===== MAIN =====
+// =========================================
+// MAIN
+// =========================================
 int main(void)
 {
     printk("PinTracker start\r\n");
 
-    printk("A\r\n");
-
-	if (!device_is_ready(spi_dev)) {
-		printk("SPI not ready\r\n");
-		return 0;
-	}
-
-	printk("B\r\n");
-
-	if (!device_is_ready(cs_gpio)) {
-		printk("CS GPIO not ready\r\n");
-		return 0;
-	}
-
-	printk("C\r\n");
-
-	gpio_pin_configure(cs_gpio, CS_PIN, GPIO_OUTPUT_HIGH);
-
-	printk("D\r\n");
-
-    k_sleep(K_MSEC(20));
-
-//	dwt_txconfig_t txconfig_options = {
-//			0x34,
-//			0x0F0F0F0F
-//		};
-
-	dw_reset();
-	dw_wait_ready();
-
-	printk("DW3000 ready\r\n");
-
-
-    // =========================
-    // 🔥 LOOP
-    // =========================
-	while (1)
-	{
-		uint8_t tx_data[] = {
-			0x41, 0x88,
-			0x00,
-			0xCA, 0xDE,
-			0x01, 0x02,
-			0x03, 0x04,
-			'H','I'
-		};
-
-		dw_write_reg(0x09, tx_data, sizeof(tx_data));
-
-		uint8_t tx_fctrl[2] = { sizeof(tx_data), 0x00 };
-		dw_write_reg(0x08, tx_fctrl, 2);
-
-		uint8_t sys_ctrl = 0x82;
-		dw_write_reg(0x0D, &sys_ctrl, 1);
-
-		printk("TX sent (raw)\r\n");
-
-		k_sleep(K_MSEC(500));
-	}
-}
-/*
-int main(void)
-{
-    printk("PinTracker start\r\n");
-
+    // ---- sanity checks ----
     if (!device_is_ready(spi_dev)) {
         printk("SPI not ready\r\n");
         return 0;
@@ -683,71 +621,90 @@ int main(void)
 
     gpio_pin_configure(cs_gpio, CS_PIN, GPIO_OUTPUT_HIGH);
 
-    printk("SPI + CS ready\r\n");
+    k_sleep(K_MSEC(20));
 
+    // ---- DW3000 bring-up ----
     dw_reset();
-    printk("DW reset done\r\n");
-
-	dwt_softreset();
-
-// wait until device is ready
-while (!dwt_checkidlerc()) {
-    k_sleep(K_MSEC(1));
-}
-
-printk("DW idle ready\r\n");
-
-	k_sleep(K_MSEC(20));
-
-	if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
-    printk("dwt_initialise failed\r\n");
-    while (1);
-}
-
-dwt_config_t config = {
-    5,              // channel
-    DWT_PLEN_256,
-    DWT_PAC16,
-    9,              // tx preamble code
-    9,              // rx preamble code
-    1,              // SFD
-    DWT_BR_6M8,
-    DWT_PHRMODE_STD,
-    DWT_PHRRATE_STD,
-    (256 + 1 + 8 - 16),
-    DWT_STS_MODE_OFF,
-    DWT_STS_LEN_64,
-    DWT_PDOA_M0
-};
-
-if (dwt_configure(&config)) {
-    printk("dwt_configure failed\r\n");
-    while (1);
-}
-
-dwt_setrxantennadelay(16384);
-dwt_settxantennadelay(16384);
-
-printk("DW3000 configured (dwt)\r\n");
-
     dw_wait_ready();
 
+    printk("DW3000 ready\r\n");
 
-	while (1)
-	{
-		float distance;
+    // =========================================
+    // LOOP
+    // =========================================
+    while (1)
+    {
+        // -----------------------------
+        // TX frame (simple test packet)
+        // -----------------------------
+        uint8_t tx_data[] = {
+            0x41, 0x88,
+            0x00,
+            0xCA, 0xDE,
+            0x01, 0x02,
+            0x03, 0x04,
+            'H','I'
+        };
 
-		if (runRangingCycle(&distance))
-		{
-			printk("Distance: %.2f m\r\n", distance);
-		}
-		else
-		{
-			printk("Ranging failed\r\n");
-		}
+        // write TX buffer
+        dw_write_reg(0x09, tx_data, sizeof(tx_data));
 
-		k_sleep(K_MSEC(500));
-	}
+        // frame control (length)
+        uint8_t tx_fctrl[2] = { sizeof(tx_data), 0x00 };
+        dw_write_reg(0x08, tx_fctrl, 2);
+
+        // start TX
+        uint8_t sys_ctrl_tx = 0x82;  // TXSTRT + TRXOFF
+        dw_write_reg(0x0D, &sys_ctrl_tx, 1);
+
+        printk("TX sent (raw)\r\n");
+
+        // -----------------------------
+        // ENABLE RX AFTER TX
+        // -----------------------------
+        uint8_t sys_ctrl_rx = 0x01;  // RXENAB
+        dw_write_reg(0x0D, &sys_ctrl_rx, 1);
+
+        // wait a bit for response
+        k_sleep(K_MSEC(10));
+
+        // -----------------------------
+        // READ STATUS
+        // -----------------------------
+        uint8_t status_buf[4];
+        dw_read_reg(0x0F, status_buf, 4);
+
+        uint32_t status =
+            (status_buf[3] << 24) |
+            (status_buf[2] << 16) |
+            (status_buf[1] << 8)  |
+            (status_buf[0]);
+
+        // -----------------------------
+        // CHECK RX GOOD FRAME
+        // -----------------------------
+        if (status & 0x00000080)  // RXFCG
+        {
+            printk("RX detected!\r\n");
+
+            // read frame length
+            uint8_t finfo[4];
+            dw_read_reg(0x10, finfo, 4);  // RX_FINFO
+
+            uint16_t frame_len = finfo[0] & 0x7F;
+
+            if (frame_len <= sizeof(rx_buffer))
+            {
+                dw_read_reg(0x11, rx_buffer, frame_len); // RX buffer
+
+                printk("RX len: %d\r\n", frame_len);
+            }
+
+            // clear ALL status flags
+            uint8_t clear[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+            dw_write_reg(0x0F, clear, 4);
+        }
+
+        k_sleep(K_MSEC(500));
+    }
 }
-
-*/
