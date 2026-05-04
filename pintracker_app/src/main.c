@@ -628,10 +628,10 @@ int main(void)
 
     k_sleep(K_MSEC(20));
 
-	dwt_txconfig_t txconfig_options = {
-			0x34,
-			0x0F0F0F0F
-		};
+//	dwt_txconfig_t txconfig_options = {
+//			0x34,
+//			0x0F0F0F0F
+//		};
 
 	dw_reset();
 	dw_wait_ready();
@@ -642,50 +642,29 @@ int main(void)
     // =========================
     // 🔥 LOOP
     // =========================
-    while (1)
-    {
-        // Load TX data
-        dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0);
-        dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);
+	while (1)
+	{
+		uint8_t tx_data[] = {
+			0x41, 0x88,
+			0x00,
+			0xCA, 0xDE,
+			0x01, 0x02,
+			0x03, 0x04,
+			'H','I'
+		};
 
-        // Start TX
-        dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+		dw_write_reg(0x09, tx_data, sizeof(tx_data));
 
-        printk("TX sent\r\n");
+		uint8_t tx_fctrl[2] = { sizeof(tx_data), 0x00 };
+		dw_write_reg(0x08, tx_fctrl, 2);
 
-        // Wait for RX
-        uint32_t status;
-        int timeout = 1000;
+		uint8_t sys_ctrl = 0x82;
+		dw_write_reg(0x0D, &sys_ctrl, 1);
 
-        do {
-            status = dwt_read_reg(SYS_STATUS_ID);
-            timeout--;
-        } while (!(status & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)) && timeout > 0);
+		printk("TX sent (raw)\r\n");
 
-        if (status & SYS_STATUS_RXFCG_BIT_MASK)
-        {
-            printk("RX OK\r\n");
-
-            uint32_t frame_len = dwt_read_reg(RX_FINFO_ID) & 0x7F;
-
-            if (frame_len <= sizeof(rx_buffer))
-            {
-                dwt_readrxdata(rx_buffer, frame_len, 0);
-            }
-
-            // clear RX flag
-            dwt_write_reg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
-        }
-        else
-        {
-            printk("RX TIMEOUT\r\n");
-
-            // clear errors
-            dwt_write_reg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
-        }
-
-        k_sleep(K_MSEC(500));
-    }
+		k_sleep(K_MSEC(500));
+	}
 }
 /*
 int main(void)
