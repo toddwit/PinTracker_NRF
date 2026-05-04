@@ -3,10 +3,6 @@
 #include <zephyr/drivers/spi.h>
 #include <zephyr/drivers/gpio.h>
 #include "dw3000/deca_device_api.h"
-//#include "dw3000/dw3000_deca_regs.h"
-
-#include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
 #include "deca_device_api.h"
 
 // ===== CONFIG =====
@@ -39,7 +35,6 @@ static uint8_t tx_poll_msg[] = {
 };
 
 static uint8_t rx_buffer[32];
-
 
 
 // ─────────────────────────────────────────────
@@ -195,12 +190,8 @@ const float IMU_ROTATION_MAX = 300.0f;
 
 const float IMU_GRAVITY = 1.0f;
 
-
-
-
 const float CUP_DIAMETER_METERS = 0.108f;
 const float DEBUG_STABILITY_MAX_SPREAD = 0.4f;
-
 
 
 // ───────────── TYPES ─────────────
@@ -236,7 +227,6 @@ struct UWBState
   uint32_t status_reg;
 
   // Anchors
-//  AnchorMeasurement anchors[MAX_ANCHORS];
   uint8_t anchor_count;
   float distance_spread;
   bool last_anchor_rejected[MAX_ANCHORS];
@@ -275,37 +265,7 @@ struct RangeState
   float last_raw_distance;
   float raw_velocity;
 };
-/*
-struct DisplayState
-{
-  TFT_eSPI display;
-  bool ready = false;
 
-  bool frozen = false;
-  float frozen_distance = 0.0f;
-  int stable_count = 0;
-
-  bool lock_displayed = false;
-
-  int displayed_feet = -1;
-  int displayed_inches = -1;
-  int displayed_total_inches = -1;
-};
-
-struct DebugSnapshot
-{
-  uint32_t dt_ms;
-  uint32_t cycle;
-
-  float median_now;
-  float display_distance;
-  float spread;
-
-  char disp_buf[DISPLAY_BUFFER_LEN];
-  char motion_str[6];
-  char lock_str[6];
-};
-*/
 
 // ───────────── GLOBAL STATE ─────────────
 
@@ -313,26 +273,17 @@ struct DebugSnapshot
 float cal_buffer[MAX_ANCHORS][CAL_SAMPLES];
 uint16_t cal_index[MAX_ANCHORS] = {0};
 
-// Filter & Lock
-//FilterState filter;
-//LockState lockState = SEARCHING;
 float lock_distance;
 int lock_counter;
 
-// UWB
-//UWBState  uwb;
-
 // IMU
-//IMUState imu;
 bool imuPresent;
 
 // Display
-//DisplayState displayState;
 float current_display_distance;
 float display_confidence;
 
 // Ranging
-//RangeState rangeState;
 
 // Timing
 uint32_t last_range_ms;
@@ -347,24 +298,8 @@ int debug_health_attempt = 0;
 
 // UWB Config
 extern dwt_txconfig_t txconfig_options;   // defined in dw3000 library
+
 /*
-static dwt_config_t config = 
-{
-  5,                  // UWB channel 5 = 6.4896 GHz center, commonly used for short-range
-  DWT_PLEN_256,       // TX preamble length (256 symbols), short = faster, lower power, long = more robust at long range
-  DWT_PAC16,          // RX Preamble Acquisition Chunk size (16 symbols)
-  9,                  // TX preamble code index
-  9,                  // RX preamble code index (same as TX for symmetric SS-TWR)
-  1,                  // SFD type 0 = Standard 8-symbol SFD (IEEE 802.15.4)
-  DWT_BR_6M8,         // Data rate = 6.8 Mbps (maximum)
-  DWT_PHRMODE_STD,    // PHY header mode = standard (explicit)
-  DWT_PHRRATE_STD,    // PHY header rate = standard
-  (256 + 1 + 8 - 16), // SFD timeout = preamble length + 1 + SFD length - PAC size
-  DWT_STS_MODE_OFF,   // STS (Scrambled Timestamp Sequence) disabled
-  DWT_STS_LEN_64,     // STS length (ignored when STS is off)
-  DWT_PDOA_M0         // Phase Difference of Arrival (PDOA) mode off
-};
-*/
 // messages
 static uint8_t tx_poll_msg1[] = {
   0xC1, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0
@@ -378,8 +313,7 @@ static uint8_t rx_resp_msg1[] = {
   0,                //  1-byte spare
   0, 0              //  2-byte crc
 };
-
-
+*/
 
 #define RST_NODE DT_NODELABEL(gpio0)
 static const struct device *rst_gpio = DEVICE_DT_GET(RST_NODE);
@@ -537,68 +471,92 @@ bool runRangingCycle(float *distance)
     }
 }
 
+extern const struct device *spi_dev;
+extern struct spi_config spi_cfg;
+
 int writetospi(uint16_t headerLength,
                const uint8_t *headerBuffer,
-               uint16_t bodyLength,
+               uint32_t bodylength,
                const uint8_t *bodyBuffer)
 {
-    struct spi_buf bufs[2];
+    printk("Enter writetospi\n");
+    k_msleep(100);
+
+    int ret;
+
+    struct spi_buf tx_bufs[2];
     struct spi_buf_set tx;
 
-    bufs[0].buf = (void *)headerBuffer;
-    bufs[0].len = headerLength;
+    size_t buf_count = 0;
 
-    if (bodyLength > 0) {
-        bufs[1].buf = (void *)bodyBuffer;
-        bufs[1].len = bodyLength;
-        tx.buffers = bufs;
-        tx.count = 2;
-    } else {
-        tx.buffers = bufs;
-        tx.count = 1;
+    if (headerLength > 0 && headerBuffer != NULL) {
+        tx_bufs[buf_count].buf = (void *)headerBuffer;
+        tx_bufs[buf_count].len = headerLength;
+        buf_count++;
     }
 
-    cs_select();
-    int ret = spi_write(spi_dev, &spi_cfg, &tx);
-    cs_deselect();
+    if (bodylength > 0 && bodyBuffer != NULL) {
+        tx_bufs[buf_count].buf = (void *)bodyBuffer;
+        tx_bufs[buf_count].len = bodylength;
+        buf_count++;
+    }
+
+    if (buf_count == 0) {
+        return 0;
+    }
+
+    tx.buffers = tx_bufs;
+    tx.count = buf_count;
+
+    printk("spi_dev ptr: %p\n", spi_dev);
+    k_msleep(100);
+
+    ret = spi_write(spi_dev, &spi_cfg, &tx);
 
     return ret;
 }
 
 int readfromspi(uint16_t headerLength,
                 const uint8_t *headerBuffer,
-                uint16_t readLength,
+                uint32_t readLength,
                 uint8_t *readBuffer)
 {
-    uint8_t dummy[32];  // must be >= max headerLength
+		printk("Enter writetospi\n");
+    uint8_t tx_buf[headerLength];
+    uint8_t rx_buf[headerLength + readLength];
 
-    struct spi_buf tx_buf = {
-        .buf = (void *)headerBuffer,
-        .len = headerLength
-    };
+    if (headerLength && headerBuffer) {
+        memcpy(tx_buf, headerBuffer, headerLength);
+    }
 
-    struct spi_buf rx_bufs[2] = {
-        { .buf = dummy,      .len = headerLength },  // <-- FIXED
-        { .buf = readBuffer, .len = readLength }
-    };
+    // SPI transceive here
 
-    struct spi_buf_set tx = {
-        .buffers = &tx_buf,
-        .count = 1
-    };
+    if (readLength && readBuffer) {
+        memcpy(readBuffer, rx_buf + headerLength, readLength);
+    }
 
-    struct spi_buf_set rx = {
-        .buffers = rx_bufs,
-        .count = 2
-    };
-
-    cs_select();
-    int ret = spi_transceive(spi_dev, &spi_cfg, &tx, &rx);
-    cs_deselect();
-
-    return ret;
+    return 0;
 }
 
+#include <zephyr/kernel.h>
+
+void deca_sleep(unsigned int time_ms)
+{
+    k_msleep(time_ms);
+}
+
+void deca_usleep(unsigned long time_us)
+{
+    k_busy_wait(time_us);
+}
+
+#include <zephyr/drivers/gpio.h>
+
+extern const struct gpio_dt_spec dw_rst;
+
+void reset_DWIC(void)
+{
+}
 
 
 // =========================================
@@ -624,10 +582,83 @@ int main(void)
     k_sleep(K_MSEC(20));
 
     // ---- DW3000 bring-up ----
-    dw_reset();
-    dw_wait_ready();
+//    dw_reset();
+//    dw_wait_ready();
+//    printk("DW3000 ready\r\n");
 
-    printk("DW3000 ready\r\n");
+	printk("SPI write ptr: %p\n", writetospi);
+	printk("SPI read ptr: %p\n", readfromspi);
+
+	printk("Before init\n");
+	
+	if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
+		printk("INIT FAILED\r\n");
+		while (1);
+	}
+
+	printk("dwt init OK\r\n");
+
+	printk("Before configure\n");
+
+	if (dwt_configure(&config)) {
+		printk("CONFIG FAILED\r\n");
+		while (1);
+	}
+
+	printk("config OK\r\n");
+
+	// ==========================
+	// DW3000 BASIC CONFIG (MATCH ARDUINO)
+	// ==========================
+
+	// ---- CHANNEL + RF SETTINGS ----
+	// CHAN_CTRL (0x1F)
+	uint8_t chan_ctrl[4] = {
+		0x05,  // channel 5
+		0x00,
+		0x00,
+		0x00
+	};
+	dw_write_reg(0x1F, chan_ctrl, 4);
+
+	// ---- TX_FCTRL (frame config baseline) ----
+	// (we’ll still overwrite length later)
+	uint8_t tx_fctrl_cfg[2] = {
+		0x0C,  // reasonable default
+		0x00
+	};
+	dw_write_reg(0x08, tx_fctrl_cfg, 2);
+
+	// ---- SYS_CFG (enable RX) ----
+	uint8_t sys_cfg[4] = {
+		0x00, 0x00, 0x00, 0x00
+	};
+	dw_write_reg(0x04, sys_cfg, 4);
+
+	// ---- DRX_TUNE (PAC / preamble tuning) ----
+	// PAC16 baseline
+	uint8_t drx_tune[2] = {
+		0x10, 0x00
+	};
+	dw_write_reg(0x27, drx_tune, 2);
+
+	// ---- RF TX POWER (safe default) ----
+	uint8_t tx_power[4] = {
+		0x1F, 0x1F, 0x1F, 0x1F
+	};
+	dw_write_reg(0x1E, tx_power, 4);
+
+	// ---- PLL / RF CONF (leave mostly default but touch once) ----
+	uint8_t rf_conf[4] = {
+		0x00, 0x00, 0x00, 0x00
+	};
+	dw_write_reg(0x28, rf_conf, 4);
+
+	// ---- CLEAR ALL STATUS ----
+	uint8_t clear[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+	dw_write_reg(0x0F, clear, 4);
+
+	printk("DW config applied\r\n");
 
     // =========================================
     // LOOP
@@ -637,13 +668,13 @@ int main(void)
         // -----------------------------
         // TX frame (simple test packet)
         // -----------------------------
-		uint8_t tx_data[10] = {
-			0x41, 0x88,        // frame control (same as Arduino)
-			0x00,              // sequence number
-			0xCA, 0xDE,        // PAN ID
-			0x01, 0x02,        // destination
-			0x03, 0x04,        // source
-			0xE0               // dummy payload (important: NOT "HI")
+		uint8_t tx_data[] = {
+			0x41, 0x88,
+			0x00,
+			0xCA, 0xDE,
+			0x01, 0x02,
+			0x03, 0x04,
+			0xE0, 0x00, 0x00, 0x00   // pad it slightly
 		};
 
         // write TX buffer
