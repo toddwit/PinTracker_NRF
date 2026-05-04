@@ -637,20 +637,20 @@ int main(void)
         // -----------------------------
         // TX frame (simple test packet)
         // -----------------------------
-        uint8_t tx_data[] = {
-            0x41, 0x88,
-            0x00,
-            0xCA, 0xDE,
-            0x01, 0x02,
-            0x03, 0x04,
-            'H','I'
-        };
+		uint8_t tx_data[10] = {
+			0x41, 0x88,        // frame control (same as Arduino)
+			0x00,              // sequence number
+			0xCA, 0xDE,        // PAN ID
+			0x01, 0x02,        // destination
+			0x03, 0x04,        // source
+			0xE0               // dummy payload (important: NOT "HI")
+		};
 
         // write TX buffer
         dw_write_reg(0x09, tx_data, sizeof(tx_data));
 
         // frame control (length)
-        uint8_t tx_fctrl[2] = { sizeof(tx_data), 0x00 };
+        uint8_t tx_fctrl[2] = { 10, 0x00 };
         dw_write_reg(0x08, tx_fctrl, 2);
 
         // start TX
