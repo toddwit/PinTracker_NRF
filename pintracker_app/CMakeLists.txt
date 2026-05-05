@@ -5,8 +5,8 @@ project(pintracker_app)
 
 target_sources(app PRIVATE
     src/main.c
+    src/dw3000_port.c
 
-    # DW3000 driver files
     src/dw3000/deca_interface.c
     src/dw3000/deca_compat.c
     src/dw3000/dw3000_device.c
