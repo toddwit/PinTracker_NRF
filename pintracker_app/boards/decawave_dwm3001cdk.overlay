@@ -1,3 +1,12 @@
-&spi1 {
-	status = "okay";
+&spi3 {
+    status = "okay";
+
+    pinctrl-0 = <&spi3_default>;
+    pinctrl-1 = <&spi3_sleep>;
+    pinctrl-names = "default", "sleep";
+
+    dw3000: dw3000@0 {
+        reg = <0>;
+        spi-max-frequency = <1000000>;
+    };
 };
