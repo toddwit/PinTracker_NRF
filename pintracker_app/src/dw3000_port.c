@@ -1,31 +1,92 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/sys/printk.h>
 
+/* ===== SPI1 (from schematic) ===== */
+#define SPI_NODE DT_NODELABEL(spi1)
+
+/* ===== Correct DW3000 pins ===== */
+/* CS = P0.30 */
+static const struct gpio_dt_spec cs_gpio = {
+	.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)),
+	.pin = 30,
+	.dt_flags = GPIO_ACTIVE_LOW,
+};
+
+/* RESET = P0.18 */
+static const struct gpio_dt_spec rst_gpio = {
+	.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)),
+	.pin = 18,
+	.dt_flags = GPIO_ACTIVE_LOW,
+};
+
+/* ===== SPI device + config ===== */
 static const struct device *spi_dev;
 static struct spi_config spi_cfg;
 
-// Initialize SPI for DW3000
-void dw3000_port_init(void)
+/* ===== Init ===== */
+int dw3000_port_init(void)
 {
-	// ⚠️ This must match your board (we’ll adjust if needed)
-	spi_dev = DEVICE_DT_GET_ANY(nordic_nrf_spim);
+	spi_dev = DEVICE_DT_GET(SPI_NODE);
 
 	if (!device_is_ready(spi_dev))
 	{
-		printk("SPI device not ready!\n");
-		return;
+		printk("SPI not ready!\n");
+		return -1;
 	}
 
-	spi_cfg.frequency = 8000000;
-	spi_cfg.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB;
+	if (!device_is_ready(cs_gpio.port))
+	{
+		printk("CS GPIO not ready!\n");
+		return -1;
+	}
+
+	if (!device_is_ready(rst_gpio.port))
+	{
+		printk("RST GPIO not ready!\n");
+		return -1;
+	}
+
+	/* Configure CS */
+	gpio_pin_configure_dt(&cs_gpio, GPIO_OUTPUT_INACTIVE);
+
+	/* Configure RESET */
+	gpio_pin_configure_dt(&rst_gpio, GPIO_OUTPUT_ACTIVE);
+
+	/* Reset DW3000 */
+	gpio_pin_set_dt(&rst_gpio, 0);
+	k_msleep(2);
+	gpio_pin_set_dt(&rst_gpio, 1);
+	k_msleep(10);
+
+	printk("DW3000 reset done\n");
+
+	/* SPI CS control */
+	static struct spi_cs_control cs_ctrl = {
+		.gpio = cs_gpio,
+		.delay = 0,
+	};
+
+	/* SPI config (Mode 3 required for DW3000) */
+	spi_cfg.frequency = 1000000;
+	spi_cfg.operation =
+		SPI_WORD_SET(8) |
+		SPI_TRANSFER_MSB |
+		SPI_MODE_CPOL |
+		SPI_MODE_CPHA;
+
 	spi_cfg.slave = 0;
+	spi_cfg.cs = cs_ctrl;
+
+	printk("SPI init done\n");
+
+	return 0;
 }
 
-// =========================
-// REQUIRED BY DW3000 DRIVER
-// =========================
-
+/* ===== SPI WRITE ===== */
 int writetospi(uint16_t headerLength,
 			   const uint8_t *headerBuffer,
 			   uint32_t bodyLength,
@@ -56,6 +117,7 @@ int writetospi(uint16_t headerLength,
 	return spi_write(spi_dev, &spi_cfg, &tx);
 }
 
+/* ===== SPI READ ===== */
 int readfromspi(uint16_t headerLength,
 				const uint8_t *headerBuffer,
 				uint32_t readlength,
@@ -78,19 +140,4 @@ int readfromspi(uint16_t headerLength,
 		.count = 1};
 
 	return spi_transceive(spi_dev, &spi_cfg, &tx_set, &rx_set);
-}
-
-void deca_sleep(unsigned int time_ms)
-{
-	k_msleep(time_ms);
-}
-
-void deca_usleep(unsigned long time_us)
-{
-	k_usleep(time_us);
-}
-
-void reset_DWIC(void)
-{
-	// OK to leave empty for now
 }

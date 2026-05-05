@@ -1,0 +1,3 @@
+&spi1 {
+	status = "okay";
+};
