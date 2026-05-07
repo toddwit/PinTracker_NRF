@@ -6,12 +6,15 @@ project(pintracker_app)
 target_sources(app PRIVATE
     src/main.c
     src/dw3000_port.c
+	src/port.c
 
     src/dw3000/deca_interface.c
     src/dw3000/deca_compat.c
     src/dw3000/dw3000_device.c
+    src/dw3000/deca_probe_interface.c
 )
 
 target_include_directories(app PRIVATE
-    src/dw3000
+	src
+	src/dw3000
 )
