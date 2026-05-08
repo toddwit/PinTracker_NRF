@@ -25,7 +25,7 @@ static const struct spi_config spi_cfg = {
 				 SPI_MODE_CPOL |
 				 SPI_MODE_CPHA,
 	.slave = 0,
-	.cs = NULL,
+	.cs = {0},
 };
 
 /* ===== INIT ===== */

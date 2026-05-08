@@ -58,6 +58,25 @@ int main(void)
 
 	printk("PROBE OK\n");
 
+	while (!dwt_checkidlerc())
+	{
+		k_sleep(K_MSEC(1));
+	}
+
+	printk("IDLE_RC OK\n");
+
+	if (dwt_initialise(DWT_READ_OTP_ALL) == DWT_ERROR)
+	{
+		printk("INIT FAILED\n");
+
+		while (1)
+		{
+			k_sleep(K_SECONDS(1));
+		}
+	}
+
+	printk("INIT OK\n");
+
 	while (1)
 	{
 		k_sleep(K_SECONDS(1));
