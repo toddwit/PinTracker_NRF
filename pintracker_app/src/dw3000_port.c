@@ -25,7 +25,14 @@ static const struct spi_config spi_cfg = {
 				 SPI_MODE_CPOL |
 				 SPI_MODE_CPHA,
 	.slave = 0,
-	.cs = {{{0}}},
+	.cs = {
+		.gpio = {
+			.port = NULL,
+			.pin = 0,
+			.dt_flags = 0,
+		},
+		.delay = 0,
+	},
 };
 
 /* ===== INIT ===== */

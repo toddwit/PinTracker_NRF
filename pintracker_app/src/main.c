@@ -15,6 +15,10 @@ extern void spi_init(void);
 
 #define FW_VERSION "v1.0-nrf"
 
+/* Set to 0 for tag firmware, 1 for anchor firmware. */
+#define PINTRACKER_BUILD_ANCHOR 0
+#define PINTRACKER_ANCHOR_ID 2U
+
 #define MAX_ANCHORS 3U
 #define MEDIAN_WINDOW 7U
 #define RX_BUFFER_LEN 22U
@@ -68,10 +72,6 @@ extern void spi_init(void);
 #define DW3000_RSSI_OFFSET_DB 113.77f
 #define DW3000_NO_SIGNAL_DBM (-120.0f)
 #define SPEED_OF_LIGHT 299702547.0f
-
-#ifndef PINTRACKER_ANCHOR_ID
-#define PINTRACKER_ANCHOR_ID 0U
-#endif
 
 typedef struct {
 	float smoothed;
@@ -856,7 +856,7 @@ static void init_uwb(const char *role)
 
 int main(void)
 {
-#if defined(PINTRACKER_ROLE_ANCHOR)
+#if PINTRACKER_BUILD_ANCHOR
 	init_uwb("anchor");
 	run_anchor();
 #else

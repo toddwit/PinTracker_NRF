@@ -1,0 +1,7 @@
+default: pintracker_app
+build_dir: C:/_Work/GitHub/PinTracker_NRF/pintracker_app/build_anchor_0
+domains:
+  - name: pintracker_app
+    build_dir: C:/_Work/GitHub/PinTracker_NRF/pintracker_app/build_anchor_0/pintracker_app
+flash_order:
+  - pintracker_app
