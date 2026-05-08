@@ -16,8 +16,8 @@ extern void spi_init(void);
 #define FW_VERSION "v1.0-nrf"
 
 /* Set to 0 for tag firmware, 1 for anchor firmware. */
-#define PINTRACKER_BUILD_ANCHOR 0
-#define PINTRACKER_ANCHOR_ID 2U
+#define PINTRACKER_BUILD_ANCHOR 1
+#define PINTRACKER_ANCHOR_ID 1U
 
 #define MAX_ANCHORS 3U
 #define MEDIAN_WINDOW 7U
@@ -56,9 +56,9 @@ extern void spi_init(void);
 #define TX_ANT_DLY 16384U
 #define RX_ANT_DLY 16384U
 #define POLL_TX_TO_RESP_RX_DLY_UUS 1000U
-#define RESP_RX_TIMEOUT_UUS 9000U
+#define RESP_RX_TIMEOUT_UUS 12000U
 #define PREAMBLE_TIMEOUT_PAC 0U
-#define POLL_RX_TO_RESP_TX_DLY_UUS 3000U
+#define ANCHOR_RESPONSE_SLOT_UUS 3000U
 #define UUS_TO_DWT_TIME 65536ULL
 
 #define ALL_MSG_COMMON_LEN 10U
@@ -691,7 +691,8 @@ static bool anchor_wait_poll_and_respond(uint32_t *poll_count)
 
 				if (valid) {
 					uint64_t poll_rx_ts = get_rx_timestamp_u64();
-					uint32_t resp_tx_time = (uint32_t)((poll_rx_ts + (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8);
+					uint32_t response_delay_uus = (PINTRACKER_ANCHOR_ID + 1U) * ANCHOR_RESPONSE_SLOT_UUS;
+					uint32_t resp_tx_time = (uint32_t)((poll_rx_ts + ((uint64_t)response_delay_uus * UUS_TO_DWT_TIME)) >> 8);
 					uint64_t resp_tx_ts = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
 
 					tx_resp_msg[ALL_MSG_SN_IDX] = seq;
